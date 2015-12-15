@@ -201,6 +201,20 @@ struct __name##_back_ring {						\
 #define RING_GET_RESPONSE(_r, _idx)					\
     (&((_r)->sring->ring[((_idx) & (RING_SIZE(_r) - 1))].rsp))
 
+/*
+ * Get a local copy of a response.
+ *
+ * Use this in preference to RING_GET_RESPONSE() so all processing is
+ * done on a local copy that cannot be modified by the other end.
+ *
+ * Note that https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58145 may cause this
+ * to be ineffective where _rsp is a struct which consists of only bitfields.
+ */
+#define RING_COPY_RESPONSE(_r, _idx, _rsp) do {				\
+	/* Use volatile to force the copy into _rsp. */			\
+	*(_rsp) = *(volatile typeof(_rsp))RING_GET_RESPONSE(_r, _idx);	\
+} while (0)
+
 /* Loop termination condition: Would the specified index overflow the ring? */
 #define RING_REQUEST_CONS_OVERFLOW(_r, _cons)				\
     (((_cons) - (_r)->rsp_prod_pvt) >= RING_SIZE(_r))
