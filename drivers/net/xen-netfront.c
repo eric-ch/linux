@@ -394,6 +394,7 @@ static void xennet_tx_buf_gc(struct netfront_queue *queue)
 				continue;
 
 			id  = txrsp.id;
+			BUG_ON(id >= NET_TX_RING_SIZE);
 			skb = queue->tx_skbs[id].skb;
 			if (unlikely(gnttab_query_foreign_access(
 				queue->grant_tx_ref[id]) != 0)) {
