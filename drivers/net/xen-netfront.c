@@ -458,7 +458,7 @@ static void xennet_tx_setup_grant(unsigned long gfn, unsigned int offset,
 	tx->flags = 0;
 
 	info->tx = tx;
-	info->size += tx->size;
+	info->size += len;
 }
 
 static struct xen_netif_tx_request *xennet_make_first_txreq(
@@ -574,7 +574,7 @@ static netdev_tx_t xennet_start_xmit(struct sk_buff *skb, struct net_device *dev
 	int slots;
 	struct page *page;
 	unsigned int offset;
-	unsigned int len;
+	unsigned int len, this_len;
 	unsigned long flags;
 	struct netfront_queue *queue = NULL;
 	unsigned int num_queues = dev->real_num_tx_queues;
@@ -634,14 +634,15 @@ static netdev_tx_t xennet_start_xmit(struct sk_buff *skb, struct net_device *dev
 	}
 
 	/* First request for the linear area. */
+	this_len = min_t(unsigned int, XEN_PAGE_SIZE - offset, len);
 	first_tx = tx = xennet_make_first_txreq(queue, skb,
 						page, offset, len);
-	offset += tx->size;
+	offset += this_len;
 	if (offset == PAGE_SIZE) {
 		page++;
 		offset = 0;
 	}
-	len -= tx->size;
+	len -= this_len;
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL)
 		/* local packet? */
