@@ -114,16 +114,12 @@ void exit_thread(struct task_struct *tsk)
 	struct fpu *fpu = &t->fpu;
 
 	if (bp) {
-		struct tss_struct *tss = &per_cpu(cpu_tss_rw, get_cpu());
-
+		preempt_disable();
 		t->io_bitmap_ptr = NULL;
 		clear_thread_flag(TIF_IO_BITMAP);
-		/*
-		 * Careful, clear this in the TSS too:
-		 */
-		memset(tss->io_bitmap, 0xff, t->io_bitmap_max);
+		set_io_bitmap(t, t->io_bitmap_max);
 		t->io_bitmap_max = 0;
-		put_cpu();
+		preempt_enable();
 		kfree(bp);
 	}
 
@@ -273,26 +269,10 @@ static inline void switch_to_bitmap(struct thread_struct *prev,
 				    struct thread_struct *next,
 				    unsigned long tifp, unsigned long tifn)
 {
-	struct tss_struct *tss = this_cpu_ptr(&cpu_tss_rw);
-
-	if (tifn & _TIF_IO_BITMAP) {
-		/*
-		 * Copy the relevant range of the IO bitmap.
-		 * Normally this is 128 bytes or less:
-		 */
-		memcpy(tss->io_bitmap, next->io_bitmap_ptr,
-		       max(prev->io_bitmap_max, next->io_bitmap_max));
-		/*
-		 * Make sure that the TSS limit is correct for the CPU
-		 * to notice the IO bitmap.
-		 */
-		refresh_tss_limit();
-	} else if (tifp & _TIF_IO_BITMAP) {
-		/*
-		 * Clear any possible leftover bits:
-		 */
-		memset(tss->io_bitmap, 0xff, prev->io_bitmap_max);
-	}
+	if ((tifn & _TIF_IO_BITMAP) ||
+		(tifp & _TIF_IO_BITMAP))
+			set_io_bitmap(next,
+			max(prev->io_bitmap_max, next->io_bitmap_max));
 }
 
 #ifdef CONFIG_SMP

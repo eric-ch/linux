@@ -342,6 +342,7 @@ struct paravirt_patch_template pv_ops = {
 	.cpu.swapgs		= native_swapgs,
 
 	.cpu.set_iopl_mask	= native_set_iopl_mask,
+	.cpu.set_io_bitmap	= native_set_io_bitmap,
 
 	.cpu.start_context_switch	= paravirt_nop,
 	.cpu.end_context_switch		= paravirt_nop,

@@ -299,6 +299,12 @@ static inline void set_iopl_mask(unsigned mask)
 	PVOP_VCALL1(cpu.set_iopl_mask, mask);
 }
 
+static inline void set_io_bitmap(struct thread_struct *thread,
+				 unsigned long bytes_updated)
+{
+	PVOP_VCALL2(cpu.set_io_bitmap, thread, bytes_updated);
+}
+
 static inline void paravirt_activate_mm(struct mm_struct *prev,
 					struct mm_struct *next)
 {
