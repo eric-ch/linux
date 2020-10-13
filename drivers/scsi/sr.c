@@ -269,6 +269,15 @@ static unsigned int sr_check_events(struct cdrom_device_info *cdi,
 	if (!(clearing & DISK_EVENT_MEDIA_CHANGE))
 		return events;
 do_tur:
+	/*
+	 * Earlier GET_EVENT_STATUS_NOTIFICATION and TUR did not agree
+	 * for a couple of times in a row. We rely on TUR only for this
+	 * likely broken device, to prevent generating incorrect media
+	 * changed events for every open().
+	 */
+	if (cd->ignore_get_event)
+		events &= ~DISK_EVENT_MEDIA_CHANGE;
+
 	/* let's see whether the media is there with TUR */
 	last_present = cd->media_present;
 	ret = scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr);
@@ -281,8 +290,19 @@ do_tur:
 	cd->media_present = scsi_status_is_good(ret) ||
 		(scsi_sense_valid(&sshdr) && sshdr.asc != 0x3a);
 
-	if (last_present != cd->media_present)
+	if (last_present != cd->media_present) {
 		cd->device->changed = 1;
+	} else if (events & DISK_EVENT_MEDIA_CHANGE) {
+		if (cd->tur_mismatch > 8) {
+			printk("%s: GET_EVENT and TUR disagree continuously, "
+			       "suppress GET_EVENT events\n", cd->cdi.name);
+			cd->ignore_get_event = true;
+		} else {
+			cd->tur_mismatch++;
+		}
+	} else if (!cd->ignore_get_event && cd->tur_mismatch > 0) {
+		cd->tur_mismatch = 0;
+	}
 
 	if (cd->device->changed) {
 		events |= DISK_EVENT_MEDIA_CHANGE;

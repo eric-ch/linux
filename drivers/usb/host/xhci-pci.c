@@ -289,6 +289,11 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (xhci->quirks & XHCI_RESET_ON_RESUME)
 		xhci_dbg_trace(xhci, trace_xhci_dbg_quirks,
 				"QUIRK: Resetting on resume");
+
+        /* The use of BEI causes deadlock with VUSB
+         * FIXME: BEI should be made to work with VUSB!
+         */
+        xhci->quirks |= XHCI_AVOID_BEI;
 }
 
 #ifdef CONFIG_ACPI

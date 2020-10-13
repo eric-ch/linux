@@ -1005,6 +1005,15 @@ int usb_remove_device(struct usb_device *udev)
 	return 0;
 }
 
+void usb_device_reenumerate(struct usb_device *udev)
+{
+	struct usb_hub  *hub = usb_hub_to_struct_hub(udev->parent);
+	int             port1 = udev->portnum;
+
+	hub_port_logical_disconnect(hub, port1);
+}
+EXPORT_SYMBOL(usb_device_reenumerate);
+
 enum hub_activation_type {
 	HUB_INIT, HUB_INIT2, HUB_INIT3,		/* INITs must come first */
 	HUB_POST_RESET, HUB_RESUME, HUB_RESET_RESUME,
@@ -5907,7 +5916,7 @@ int usb_reset_device(struct usb_device *udev)
 			struct usb_driver *drv;
 			int unbind = 0;
 
-			if (cintf->dev.driver) {
+			if (cintf && cintf->dev.driver) {
 				drv = to_usb_driver(cintf->dev.driver);
 				if (drv->pre_reset && drv->post_reset)
 					unbind = (drv->pre_reset)(cintf);
@@ -5928,7 +5937,12 @@ int usb_reset_device(struct usb_device *udev)
 		for (i = config->desc.bNumInterfaces - 1; i >= 0; --i) {
 			struct usb_interface *cintf = config->interface[i];
 			struct usb_driver *drv;
-			int rebind = cintf->needs_binding;
+			int rebind;
+
+			if (!cintf)
+				continue;
+
+			rebind = cintf->needs_binding;
 
 			if (!rebind && cintf->dev.driver) {
 				drv = to_usb_driver(cintf->dev.driver);

@@ -109,6 +109,17 @@ source "drivers/usb/image/Kconfig"
 
 source "drivers/usb/usbip/Kconfig"
 
+comment "Xen USB devices"
+
+config XEN_USBDEV_BACKEND
+	tristate "Xen usb-device backend driver"
+	depends on XEN_BACKEND
+	default XEN_BACKEND
+	help
+	  The usb-device backend driver allows the kernel to export its
+	  usb devices to other guests via a high-performance shared-memory
+	  interface.
+
 endif
 
 source "drivers/usb/cdns3/Kconfig"
