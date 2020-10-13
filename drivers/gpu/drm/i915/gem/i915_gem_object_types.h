@@ -240,6 +240,14 @@ struct drm_i915_gem_object {
 
 		void *gvt_info;
 	};
+
+	struct i915_gem_foreign {
+		uint32_t flags;                 /* foreign region flags. */
+		unsigned long *mfns;            /* mfns "rent" from the guest */
+		size_t num_pages;               /* number of pages rented. */
+		unsigned long *mfns_ovr;        /* dom0 mfns overriden, used for reset. */
+		struct page **pvec;             /* vector of struct page backing the "rent" region. */
+	} foreign;
 };
 
 static inline struct drm_i915_gem_object *

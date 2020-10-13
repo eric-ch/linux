@@ -48,5 +48,7 @@ int i915_gem_userptr_ioctl(struct drm_device *dev, void *data,
 			   struct drm_file *file);
 int i915_gem_wait_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
+int i915_gem_foreign_ioctl(struct drm_device *dev, void *data,
+			   struct drm_file *file);
 
 #endif

@@ -359,6 +359,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_I915_QUERY			0x39
 #define DRM_I915_GEM_VM_CREATE		0x3a
 #define DRM_I915_GEM_VM_DESTROY		0x3b
+#define DRM_I915_GEM_FOREIGN		0x3c
 /* Must be kept compact -- no holes */
 
 #define DRM_IOCTL_I915_INIT		DRM_IOW( DRM_COMMAND_BASE + DRM_I915_INIT, drm_i915_init_t)
@@ -421,6 +422,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_IOCTL_I915_QUERY			DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_QUERY, struct drm_i915_query)
 #define DRM_IOCTL_I915_GEM_VM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_VM_CREATE, struct drm_i915_gem_vm_control)
 #define DRM_IOCTL_I915_GEM_VM_DESTROY	DRM_IOW (DRM_COMMAND_BASE + DRM_I915_GEM_VM_DESTROY, struct drm_i915_gem_vm_control)
+#define DRM_IOCTL_I915_GEM_FOREIGN		DRM_IOWR (DRM_COMMAND_BASE + DRM_I915_GEM_FOREIGN, struct drm_i915_gem_foreign)
 
 /* Allow drivers to submit batchbuffers directly to hardware, relying
  * on the security mechanisms provided by hardware.
@@ -1806,6 +1808,14 @@ struct drm_i915_reset_stats {
 	__u32 batch_pending;
 
 	__u32 pad;
+};
+
+struct drm_i915_gem_foreign {
+	__u64 __user *mfns;
+	__u32 num_pages;
+#define I915_FOREIGN_BALLOON_PAGES 0x00000001
+	__u32 flags;
+	__u32 handle;
 };
 
 struct drm_i915_gem_userptr {
