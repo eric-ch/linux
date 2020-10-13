@@ -7,6 +7,7 @@
  *	Lennert Buytenhek		<buytenh@gnu.org>
  */
 
+#include <linux/module.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -16,6 +17,10 @@
 #include <linux/if_vlan.h>
 #include <linux/netfilter_bridge.h>
 #include "br_private.h"
+
+static int br_skb_forward_copy = 0;
+module_param_named(skb_forward_copy, br_skb_forward_copy, uint, S_IRUGO);
+MODULE_PARM_DESC(skb_forward_copy, "Enable or disable SKB copying on forward path");
 
 /* Don't forward packets to originating port or forwarding disabled */
 static inline int should_deliver(const struct net_bridge_port *p,
@@ -32,6 +37,8 @@ static inline int should_deliver(const struct net_bridge_port *p,
 
 int br_dev_queue_push_xmit(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	struct sk_buff *new_skb;
+
 	skb_push(skb, ETH_HLEN);
 	if (!is_skb_forwardable(skb->dev, skb))
 		goto drop;
@@ -49,7 +56,15 @@ int br_dev_queue_push_xmit(struct net *net, struct sock *sk, struct sk_buff *skb
 		skb_set_network_header(skb, depth);
 	}
 
-	dev_queue_xmit(skb);
+	if (!br_skb_forward_copy)
+		dev_queue_xmit(skb);
+	else {
+		new_skb = skb_copy(skb, GFP_ATOMIC);
+		if (new_skb) {
+			dev_queue_xmit(new_skb);
+			kfree_skb(skb);
+		}
+	}
 
 	return 0;
 
