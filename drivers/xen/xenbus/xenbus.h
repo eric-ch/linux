@@ -133,6 +133,13 @@ int xenbus_read_otherend_details(struct xenbus_device *xendev,
 
 void xenbus_ring_ops_init(void);
 
+static inline bool xenbus_dev_is_vif(const struct xenbus_device *dev)
+{
+       return (dev &&
+               (!strcmp("vif", dev->devicetype) ||
+                !strcmp("vwif", dev->devicetype)));
+}
+
 int xenbus_dev_request_and_reply(struct xsd_sockmsg *msg, void *par);
 void xenbus_dev_queue_reply(struct xb_req_data *req);
 
