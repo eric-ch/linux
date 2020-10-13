@@ -653,6 +653,7 @@ return_normal:
 		kgdb_roundup_cpus();
 #endif
 
+#ifndef CONFIG_XEN
 	/*
 	 * Wait for the other CPUs to be notified and be waiting for us:
 	 */
@@ -663,6 +664,7 @@ return_normal:
 		udelay(1000);
 	if (!time_left)
 		pr_crit("Timed out waiting for secondary CPUs.\n");
+#endif
 
 	/*
 	 * At this point the primary processor is completely

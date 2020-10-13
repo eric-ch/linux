@@ -861,11 +861,13 @@ static int hvc_poll_init(struct tty_driver *driver, int line, char *options)
 static int hvc_poll_get_char(struct tty_driver *driver, int line)
 {
 	struct tty_struct *tty = driver->ttys[0];
-	struct hvc_struct *hp = tty->driver_data;
+	struct hvc_struct *hp = tty ? tty->driver_data : NULL;
+	struct hv_ops *ops = (hp && hp->ops) ? hp->ops : cons_ops[last_hvc];
+	uint32_t vtno = hp ? hp->vtermno : vtermnos[last_hvc];
 	int n;
 	char ch;
 
-	n = hp->ops->get_chars(hp->vtermno, &ch, 1);
+	n = ops->get_chars(vtno, &ch, 1);
 
 	if (n <= 0)
 		return NO_POLL_CHAR;
@@ -876,11 +878,14 @@ static int hvc_poll_get_char(struct tty_driver *driver, int line)
 static void hvc_poll_put_char(struct tty_driver *driver, int line, char ch)
 {
 	struct tty_struct *tty = driver->ttys[0];
-	struct hvc_struct *hp = tty->driver_data;
+	struct hvc_struct *hp = tty ? tty->driver_data : NULL;
+	struct hv_ops *ops = (hp && hp->ops) ? hp->ops : cons_ops[last_hvc];
+	uint32_t vtno = hp ? hp->vtermno : vtermnos[last_hvc];
+
 	int n;
 
 	do {
-		n = hp->ops->put_chars(hp->vtermno, &ch, 1);
+		n = ops->put_chars(vtno, &ch, 1);
 	} while (n <= 0);
 }
 #endif
