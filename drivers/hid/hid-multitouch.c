@@ -2025,6 +2025,9 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_CONFIDENCE_MINUS_ONE,
 		MT_USB_DEVICE(USB_VENDOR_ID_TURBOX,
 			USB_DEVICE_ID_TURBOX_TOUCHSCREEN_MOSART) },
+	{ .driver_data = MT_CLS_CONFIDENCE_MINUS_ONE,
+		HID_USB_DEVICE(USB_VENDOR_ID_TURBOX,
+			USB_DEVICE_ID_TURBOX_TOUCHSCREEN_MOSART5) },
 
 	/* Novatek Panel */
 	{ .driver_data = MT_CLS_NSMU,
