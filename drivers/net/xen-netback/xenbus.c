@@ -1134,6 +1134,7 @@ static int read_xenbus_vif_flags(struct backend_info *be)
 
 static const struct xenbus_device_id netback_ids[] = {
 	{ "vif" },
+	{ "vwif" },
 	{ "" }
 };
 
