@@ -417,10 +417,13 @@ static int pcistub_init_device(struct pci_dev *dev)
 	if (!dev_data->pci_saved_state)
 		dev_err(&dev->dev, "Could not store PCI conf saved state!\n");
 	else {
+#if 0
 		dev_dbg(&dev->dev, "resetting (FLR, D3, etc) the device\n");
 		__pci_reset_function_locked(dev);
 		pci_restore_state(dev);
+#endif
 	}
+
 	/* Now disable the device (this also ensures some private device
 	 * data is setup before we export)
 	 */

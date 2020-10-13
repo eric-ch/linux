@@ -3764,9 +3764,14 @@ static int reset_ivb_igd(struct pci_dev *dev, int probe)
 	void __iomem *mmio_base;
 	unsigned long timeout;
 	u32 val;
+	u16 cmd;
 
 	if (probe)
 		return 0;
+
+        /* enable response in memory space */
+        pci_read_config_word(dev, PCI_COMMAND, &cmd);
+        pci_write_config_word(dev, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY);
 
 	mmio_base = pci_iomap(dev, 0, 0);
 	if (!mmio_base)
@@ -3798,7 +3803,10 @@ reset_complete:
 	iowrite32(0x00000002, mmio_base + NSDE_PWR_STATE);
 
 	pci_iounmap(dev, mmio_base);
-	return 0;
+        pci_write_config_word(dev, PCI_COMMAND, cmd);
+        /* follow with regular flr, returning ENOTTY causes rest of the FLR non-device specific code
+           to execute. Alternatively we could execute it here explicitly and mby that would be cleaner */
+        return -ENOTTY;
 }
 
 /* Device-specific reset method for Chelsio T4-based adapters */

@@ -5055,7 +5055,12 @@ int pci_probe_reset_function(struct pci_dev *dev)
 	if (rc != -ENOTTY)
 		return rc;
 
-	return pci_parent_bus_reset(dev, 1);
+	rc = pci_parent_bus_reset(dev, 1);
+	/* larger delay for gpus */
+	if (dev->class == 0x30000 || dev->class == 0x38000)
+		msleep(500);
+	return rc;
+
 }
 
 /**
