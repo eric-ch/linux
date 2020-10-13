@@ -82,6 +82,7 @@
 #define __HYPERVISOR_xc_reserved_op       39 /* reserved for XenClient */
 #define __HYPERVISOR_xenpmu_op            40
 #define __HYPERVISOR_dm_op                41
+#define __HYPERVISOR_txt_op               42
 
 /* Architecture-specific hypercall definitions. */
 #define __HYPERVISOR_arch_0               48
@@ -744,6 +745,20 @@ struct dom0_vga_console_info {
 typedef uint64_t cpumap_t;
 
 typedef uint8_t xen_domain_handle_t[16];
+
+#define TXTOP_GET 0
+
+struct txt_op {
+	uint64_t  size;
+
+#define TXTOP_EVTLOG_FORMAT_UNKNOWN	0x0
+#define TXTOP_EVTLOG_FORMAT_TCG_12	0x1
+#define TXTOP_EVTLOG_FORMAT_LEGACY_20	0x2
+#define TXTOP_EVTLOG_FORMAT_TCG_20	0x3
+	uint8_t format;
+	uint8_t _pad[7];
+	void *buffer;
+};
 
 /* Turn a plain number into a C unsigned long constant. */
 #define __mk_unsigned_long(x) x ## UL

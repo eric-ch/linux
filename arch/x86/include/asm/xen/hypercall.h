@@ -446,6 +446,12 @@ HYPERVISOR_dm_op(
 	return ret;
 }
 
+static inline int
+HYPERVISOR_txt_op(unsigned int op, void *arg)
+{
+	return _hypercall2(int, txt_op, op, arg);
+}
+
 static inline void
 MULTI_fpu_taskswitch(struct multicall_entry *mcl, int set)
 {

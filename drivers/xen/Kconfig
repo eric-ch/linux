@@ -177,6 +177,15 @@ config SWIOTLB_XEN
 	def_bool y
 	select SWIOTLB
 
+config XEN_TXT
+	tristate "Xen TXT event log retrieval"
+	depends on X86 && TCG_TPM
+	default n
+	help
+	  Support the Xen hypercall to retrieve the tboot TXT
+	  event log.  The log can be read through securityfs
+	  txt/tpm12_binary_evtlog or txt/tpm20_binary_evtlog
+
 config XEN_PCIDEV_BACKEND
 	tristate "Xen PCI-device backend driver"
 	depends on PCI && X86 && XEN
