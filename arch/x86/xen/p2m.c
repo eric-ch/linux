@@ -840,6 +840,7 @@ static int p2m_dump_open(struct inode *inode, struct file *filp)
 {
 	return single_open(filp, p2m_dump_show, NULL);
 }
+EXPORT_SYMBOL_GPL(set_phys_to_machine);
 
 static const struct file_operations p2m_dump_fops = {
 	.open		= p2m_dump_open,

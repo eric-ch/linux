@@ -2098,6 +2098,16 @@ config XEN_FBDEV_FRONTEND
 	  frame buffer driver.  It communicates with a back-end
 	  in another domain.
 
+config XEN_FBDEV2_FRONTEND
+        tristate "Xen virtual frame buffer support for XenClient"
+        depends on FB && XEN
+        select FB_CFB_COPYAREA
+        select FB_CFB_IMAGEBLIT
+        select FB_CFB_FILLRECT
+        default y
+        help
+          Hack to compile the needed functions for xenfb2
+
 config FB_METRONOME
 	tristate "E-Ink Metronome/8track controller support"
 	depends on FB

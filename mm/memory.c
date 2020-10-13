@@ -1642,6 +1642,7 @@ out_unlock:
 	pte_unmap_unlock(pte, ptl);
 	return VM_FAULT_NOPAGE;
 }
+EXPORT_SYMBOL_GPL(zap_page_range);
 
 /**
  * vmf_insert_pfn_prot - insert single pfn into user vma with specified pgprot
