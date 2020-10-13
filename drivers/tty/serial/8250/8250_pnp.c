@@ -454,6 +454,10 @@ serial_pnp_probe(struct pnp_dev *dev, const struct pnp_device_id *dev_id)
 	} else if (pnp_port_valid(dev, 0)) {
 		uart.port.iobase = pnp_port_start(dev, 0);
 		uart.port.iotype = UPIO_PORT;
+               /* Xen uses port 3f8 for logging, turn off ability to disable it as it breaks suspend */
+               if (uart.port.iobase == 0x3f8) {
+                       dev->capabilities &= ~PNP_DISABLE;
+               }
 	} else if (pnp_mem_valid(dev, 0)) {
 		uart.port.mapbase = pnp_mem_start(dev, 0);
 		uart.port.iotype = UPIO_MEM;
