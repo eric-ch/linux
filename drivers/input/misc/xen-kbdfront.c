@@ -303,9 +303,9 @@ static int xenkbd_probe(struct xenbus_device *dev,
 		if (abs) {
 			__set_bit(EV_ABS, ptr->evbit);
 			input_set_abs_params(ptr, ABS_X, 0,
-					     ptr_size[KPARAM_X], 0, 0);
+					     XENFB_TABLET_WIDTH, 0, 0);
 			input_set_abs_params(ptr, ABS_Y, 0,
-					     ptr_size[KPARAM_Y], 0, 0);
+					     XENFB_TABLET_HEIGHT, 0, 0);
 		} else {
 			input_set_capability(ptr, EV_REL, REL_X);
 			input_set_capability(ptr, EV_REL, REL_Y);

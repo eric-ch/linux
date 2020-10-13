@@ -137,6 +137,8 @@ struct xenfb_page {
 #ifdef __KERNEL__
 #define XENFB_WIDTH 800
 #define XENFB_HEIGHT 600
+#define XENFB_TABLET_WIDTH 32767
+#define XENFB_TABLET_HEIGHT 32767
 #define XENFB_DEPTH 32
 #endif
 
