@@ -102,10 +102,8 @@ static void pcistub_device_release(struct kref *kref)
 
 	xen_unregister_device_domain_owner(dev);
 
-	/* Call the reset function which does not take lock as this
-	 * is called from "unbind" which takes a device_lock mutex.
-	 */
-	__pci_reset_function_locked(dev);
+	/* Reset is done by the toolstack by using 'reset_device' on the
+	 * SysFS. */
 	if (dev_data &&
 	    pci_load_and_free_saved_state(dev, &dev_data->pci_saved_state))
 		dev_info(&dev->dev, "Could not reload PCI state\n");
@@ -125,9 +123,6 @@ static void pcistub_device_release(struct kref *kref)
 			dev_warn(&dev->dev, "MSI-X release failed (%d)\n",
 				 err);
 	}
-
-	/* Disable the device */
-	xen_pcibk_reset_device(dev);
 
 	kfree(dev_data);
 	pci_set_drvdata(dev, NULL);
@@ -225,6 +220,243 @@ struct pci_dev *pcistub_get_pci_dev_by_slot(struct xen_pcibk_device *pdev,
 	return found_dev;
 }
 
+
+/**
+ * Returns true iff the given device supports PCIe FLRs.
+ */
+static bool __device_supports_pcie_flr(struct pci_dev *dev)
+{
+	u32 cap;
+
+	/*
+         * Read the device's capabilities. Note that this can be used even on legacy
+	 * PCI devices (and not just on PCIe devices)-- it indicates that no capabilities
+	 * are supported if the device is legacy PCI by setting cap to 0.
+	 */
+	 pcie_capability_read_dword(dev, PCI_EXP_DEVCAP, &cap);
+
+	/* Return true iff the device advertises supporting an FLR. */
+	return (cap & PCI_EXP_DEVCAP_FLR);
+}
+
+
+/**
+ * Returns true iff the given device supports PCI Advanced Functionality (AF) FLRs.
+ */
+static bool __device_supports_pci_af_flr(struct pci_dev *dev)
+{
+	int pos;
+	u8 capability_flags;
+
+	/* First, try to find the location of the PCI Advanced Functionality capability byte. */
+	pos = pci_find_capability(dev, PCI_CAP_ID_AF);
+
+	/*
+	 * If we weren't able to find the capability byte, this device doesn't support
+	 * the Advanced Functionality extensions, and thus won't support AF FLR.
+	 */
+	if (!pos)
+		return false;
+
+	/* Read the capabilities advertised in the AF capability byte. */
+	pci_read_config_byte(dev, pos + PCI_AF_CAP, &capability_flags);
+
+	/*
+	 * If the device does support AF, it will advertise FLR support via the
+	 * PCI_AF_CAP_FLR bit. We'll also check for the Transactions Pending (TP)
+	 * mechanism, as the kernel requires this extension to issue an AF FLR.
+	 * (Internally, the PCI reset code needs to be able to wait for all
+	 * pending transactions to complete prior to issuing the AF FLR.)
+	 */
+	return (capability_flags & PCI_AF_CAP_TP) && (capability_flags & PCI_AF_CAP_FLR);
+}
+
+
+/**
+ * Returns true iff the given device adverstises supporting function-
+ * level-reset (FLR).
+ */
+static bool device_supports_flr(struct pci_dev *dev)
+{
+	return __device_supports_pci_af_flr(dev) || __device_supports_pcie_flr(dev);
+}
+
+
+/**
+ * Out argument for the __safe_to_sbr_device_callback function.
+ */
+struct safe_to_sbr_arguments {
+
+	//Stores the most recently encountered PCI device that does
+	//not belong to pciback. As used below, this is the result of a
+	//search for a non-pciback device on a bus; we stop upon finding
+	//the first non-pciback device.
+	struct pci_dev *last_non_pciback_device;
+
+	//Stores the number of pciback devices that appear to be in use
+	//on the bus in question.
+	int use_count;
+
+};
+
+
+/**
+ *	A callback function which determines if a given PCI device is owned by pciback,
+ *	and whether the given device is in use. Used by safe_to_sbr_device.
+ *
+ *	@param dev The PCI device to be checked.
+ *	@param data An out argument of type struct safe_to_sbr_device_callback_arguments.
+ *			Updated to indicate the result of the search. See the struct's definition
+ *			for more details.
+ *
+ */
+static int __safe_to_sbr_device_callback(struct pci_dev *dev, void *data)
+{
+
+	struct pcistub_device *psdev;
+
+	bool device_owned_by_pciback = false;
+	struct safe_to_sbr_arguments *arg = data;
+
+	unsigned long flags;
+
+	//Ensure that we have exclusive access to the list of PCI devices,
+	//so we can traverse it.
+	spin_lock_irqsave(&pcistub_devices_lock, flags);
+
+	//Iterate over all PCI devices owned by the pci stub.
+	list_for_each_entry(psdev, &pcistub_devices, dev_list) {
+
+		//If the given device is owned by pciback...
+		if (psdev->dev == dev) {
+
+			//mark it as a pciback device.
+			device_owned_by_pciback = true;
+
+			//If we have a physical device associated with the pciback device,
+			//mark this device as in-use.
+			if (psdev->pdev)
+				arg->use_count++;
+
+			//Stop searching; we've found a the PCIback device associated with this one.
+			break;
+		}
+	}
+
+	//Release the PCI device lock...
+	spin_unlock_irqrestore(&pcistub_devices_lock, flags);
+
+	//... and report if we've found a device that's not owned by pciback.
+	dev_dbg(&dev->dev, "%s\n", device_owned_by_pciback ? "is owned by pciback, and can be reset if not in use."
+			: "not owned by pciback, and thus cannot be reset.");
+
+	//If we've found a device that's not owned by pciback, update our data
+	//argument so it points to the most recent unowned device. (We check
+	//this like a flag, later: if it's never set, no one owns the device!)
+	if (!device_owned_by_pciback)
+		arg->last_non_pciback_device = dev;
+
+	//If we've found a device that's not owned by pciback, return false--
+	//this indicates that pci_walk_bus should cease its walk.
+	return !device_owned_by_pciback;
+}
+
+
+/**
+ * Returns true iff it should be safe to issue a secondary bus reset
+ * to the device; that is, if an SBR can be issued without disrupting
+ * other devices.
+ */
+static bool safe_to_sbr_device(struct pci_dev *dev)
+{
+	struct safe_to_sbr_arguments walk_result = { .last_non_pciback_device = NULL, .use_count = 0 };
+
+	//Walk the PCI bus, attempting to find if any of the given devices
+	pci_walk_bus(dev->bus, __safe_to_sbr_device_callback, &walk_result);
+
+	//If the device is in use, emit a warning error.
+	if(walk_result.use_count > 0)
+		dev_dbg(&dev->dev, "is in use; currently not safe to SBR device.\n");
+
+	//Return true iff we did not pick up any other devices
+	//that were either in use, or not owned by pciback.
+	return (walk_result.last_non_pciback_device == NULL) && (walk_result.use_count == 0);
+}
+
+
+/**
+ * Attempt a raw reset of the provided PCI device-- via any
+ * method available to us. This method prefers the gentlest
+ * possible reset method-- currently an FLR, which many
+ * PCIe devices should support.
+ *
+ * @param dev The pci device to be reset.
+ * @return Zero on success, or the error code generated by the reset method on failure.
+ */
+static int __pcistub_raw_device_reset(struct pci_dev *dev)
+{
+	//Determine if bus resetting techniques (SBR, slot resets)
+	//are safe, and thus should be allowed.
+	int allow_bus_reset = safe_to_sbr_device(dev);
+
+	//If FLRs are supported; we'll try to let the linux kernel
+	//manually reset the device.
+	if(device_supports_flr(dev)) {
+		dev_dbg(&dev->dev, "Resetting device using an FLR.");
+		return pci_reset_function(dev);
+	}
+
+	//pci_reset_bus will first attempt by slot, if unable,
+	//will attempt to reset the entire PCI bus
+	if(allow_bus_reset) {
+		dev_dbg(&dev->dev, "Resetting device using a slot or SBR");
+		return pci_reset_bus(dev);
+	}
+
+	//If we weren't able to reset the device by any of our known-good methods,
+	//fall back to the linux kernel's reset function. Unfortunately, this considers a
+	//power management reset to be a valid reset; though this doesn't work for many devices--
+	//especially GPUs.
+	dev_err(&dev->dev, "No reset methods available for %s. Falling back to kernel reset.", pci_name(dev));
+	pci_reset_function(dev);
+
+	//Return an error code, indicating that we likely did not reset the device correctly.
+	return -ENOTTY;
+}
+
+
+/**
+ * Resets the target (pciback-owned) PCI device. Primarily intended
+ * for use by the toolstack, so it can ensure a consistent PCI device
+ * state on VM startup.
+ *
+ * @param dev The device to be reset.
+ * @return Zero on success, or a negated error code on failure.
+ */
+static int pcistub_reset_pci_dev(struct pci_dev *dev)
+{
+	int rc;
+
+	if (!dev)
+		return -EINVAL;
+
+	/*
+	 * Takes the PCI lock. OK to do it as we are never called
+	 * from 'unbind' state and don't deadlock.
+	 */
+	rc =__pcistub_raw_device_reset(dev);
+	pci_restore_state(dev);
+
+	/* This disables the device. */
+	xen_pcibk_reset_device(dev);
+
+	/* And cleanup up our emulated fields. */
+	xen_pcibk_config_reset_dev(dev);
+	return rc;
+}
+
+
+
 struct pci_dev *pcistub_get_pci_dev(struct xen_pcibk_device *pdev,
 				    struct pci_dev *dev)
 {
@@ -280,11 +512,13 @@ void pcistub_put_pci_dev(struct pci_dev *dev)
 	* pcistub and xen_pcibk when AER is in processing
 	*/
 	down_write(&pcistub_sem);
-	/* Cleanup our device
-	 * (so it's ready for the next domain)
-	 */
 	device_lock_assert(&dev->dev);
-	__pci_reset_function_locked(dev);
+	/*
+	 * Reset is up to the toolstack.
+	 * The toolstack has to call 'reset_device' before
+	 * providing the PCI device to a guest (see pcistub_reset_device).
+	 */
+	//__pci_reset_function_locked(dev);
 
 	dev_data = pci_get_drvdata(dev);
 	ret = pci_load_saved_state(dev, dev_data->pci_saved_state);
@@ -1457,6 +1691,41 @@ static ssize_t restrictive_store(struct device_driver *drv, const char *buf,
 }
 static DRIVER_ATTR_WO(restrictive);
 
+/**
+ * Handles the "reset_device" sysfs attribute. This is the primary reset interface
+ * utilized by the toolstack.
+ */
+static ssize_t reset_device_store(struct device_driver *drv, const char *buf, size_t count)
+{
+	int domain, bus, slot, func, err;
+	struct pcistub_device *psdev;
+
+	//Attempt to convert the user's string to a BDF/slot.
+	err = str_to_slot(buf, &domain, &bus, &slot, &func);
+	if (err)
+		return -ENODEV;
+
+	//... and then use that slot to find the pciback device.
+	psdev = pcistub_device_find(domain, bus, slot, func);
+
+	//If we have a device, attempt to reset it using our internal reset path.
+	if (psdev) {
+		err = pcistub_reset_pci_dev(psdev->dev);
+		pcistub_device_put(psdev);
+
+		//If we were not able to reset the device, return the relevant error code.
+		if(err)
+			err = -ENODEV;
+	}
+	//Otherwise, indicate that there's no such device.
+	else {
+		err = -ENODEV;
+	}
+
+	return err ? err : count;
+
+}
+static DRIVER_ATTR_WO(reset_device);
 
 static void pcistub_exit(void)
 {
@@ -1473,6 +1742,8 @@ static void pcistub_exit(void)
 			   &driver_attr_irq_handlers);
 	driver_remove_file(&xen_pcibk_pci_driver.driver,
 			   &driver_attr_irq_handler_state);
+	driver_remove_file(&xen_pcibk_pci_driver.driver,
+			   &driver_attr_reset_device);
 	pci_unregister_driver(&xen_pcibk_pci_driver);
 }
 
@@ -1569,6 +1840,9 @@ static int __init pcistub_init(void)
 	if (!err)
 		err = driver_create_file(&xen_pcibk_pci_driver.driver,
 					&driver_attr_irq_handler_state);
+	if (!err)
+		err = driver_create_file(&xen_pcibk_pci_driver.driver,
+					&driver_attr_reset_device);
 	if (err)
 		pcistub_exit();
 
