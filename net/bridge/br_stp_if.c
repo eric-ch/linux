@@ -316,6 +316,7 @@ int br_stp_set_port_priority(struct net_bridge_port *p, unsigned long newprio)
 		br_port_state_selection(p->br);
 	}
 
+	br_maybe_copy_iface_carrier(p);
 	return 0;
 }
 

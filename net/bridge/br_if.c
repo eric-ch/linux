@@ -86,6 +86,7 @@ void br_port_carrier_check(struct net_bridge_port *p, bool *notified)
 			*notified = true;
 		}
 	}
+	br_maybe_copy_iface_carrier(p);
 	spin_unlock_bh(&br->lock);
 }
 
@@ -744,6 +745,31 @@ void br_port_flags_change(struct net_bridge_port *p, unsigned long mask)
 
 	if (mask & BR_NEIGH_SUPPRESS)
 		br_recalculate_neigh_suppress_enabled(br);
+}
+
+/* if p->priority == 0 either copy carier if p is forwarding
+ * or set carrier to off if p is is not forwarding
+ * */
+int br_maybe_copy_iface_carrier(struct net_bridge_port *p)
+{
+	int carrier;
+	if (p->priority == 0) {
+		if (p->state == BR_STATE_FORWARDING)
+			carrier = netif_carrier_ok(p->dev);
+		else
+			carrier = 0;
+		if (carrier != netif_carrier_ok(p->br->dev)) {
+			printk("prio 0 port %s carrier %s, update bridge %s state\n",
+			       p->dev->name, carrier ? "on" : "off",
+			       p->br->dev->name);
+			if (carrier)
+				netif_carrier_on(p->br->dev);
+			else
+				netif_carrier_off(p->br->dev);
+		}
+		return 1;
+	}
+	return 0;
 }
 
 bool br_port_flag_is_set(const struct net_device *dev, unsigned long flag)

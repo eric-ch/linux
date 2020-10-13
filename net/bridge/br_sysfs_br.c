@@ -345,6 +345,23 @@ static ssize_t no_linklocal_learn_store(struct device *d,
 }
 static DEVICE_ATTR_RW(no_linklocal_learn);
 
+static int set_link_state(struct net_bridge *br, unsigned long val)
+{
+	if (val)
+		netif_carrier_on(br->dev);
+	else
+		netif_carrier_off(br->dev);
+	return 0;
+}
+
+static ssize_t store_link_state(struct device *d,
+				struct device_attribute *attr,
+				const char *buf, size_t len)
+{
+	return store_bridge_parm(d, buf, len, set_link_state);
+}
+static DEVICE_ATTR(link_state, S_IWUSR, NULL, store_link_state);
+
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
 static ssize_t multicast_router_show(struct device *d,
 				     struct device_attribute *attr, char *buf)
@@ -864,6 +881,7 @@ static struct attribute *bridge_attrs[] = {
 	&dev_attr_gc_timer.attr,
 	&dev_attr_group_addr.attr,
 	&dev_attr_flush.attr,
+	&dev_attr_link_state.attr,
 	&dev_attr_no_linklocal_learn.attr,
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
 	&dev_attr_multicast_router.attr,

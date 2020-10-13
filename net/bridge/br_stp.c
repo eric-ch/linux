@@ -466,8 +466,13 @@ void br_port_state_selection(struct net_bridge *br)
 
 	if (liveports == 0)
 		netif_carrier_off(br->dev);
-	else
-		netif_carrier_on(br->dev);
+        else {
+                int carrier_copied = 0;
+                list_for_each_entry(p, &br->port_list, list)
+                        carrier_copied |= br_maybe_copy_iface_carrier(p);
+                if (!carrier_copied)
+                        netif_carrier_on(br->dev);
+        }
 }
 
 /* called under bridge lock */
