@@ -2216,7 +2216,7 @@ static int e1000_set_mac(struct net_device *netdev, void *p)
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
 	memcpy(hw->mac_addr, addr->sa_data, netdev->addr_len);
 
-	e1000_rar_set(hw, hw->mac_addr, 0);
+	e1000_rar_set(hw, hw->mac_addr, E1000_RAR_ENTRIES - 2);
 
 	if (hw->mac_type == e1000_82542_rev2_0)
 		e1000_leave_82542_rst(adapter);

@@ -117,7 +117,7 @@ void e1000e_init_rx_addrs(struct e1000_hw *hw, u16 rar_count)
 	/* Setup the receive address */
 	e_dbg("Programming MAC Address into RAR[0]\n");
 
-	hw->mac.ops.rar_set(hw, hw->mac.addr, 0);
+	hw->mac.ops.rar_set(hw, hw->mac.perm_addr, 0);
 
 	/* Zero out the other (rar_entry_count - 1) receive addresses */
 	e_dbg("Clearing RAR[1-%u]\n", rar_count - 1);

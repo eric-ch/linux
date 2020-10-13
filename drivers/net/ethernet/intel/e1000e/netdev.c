@@ -4764,7 +4764,8 @@ static int e1000_set_mac(struct net_device *netdev, void *p)
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
 	memcpy(adapter->hw.mac.addr, addr->sa_data, netdev->addr_len);
 
-	hw->mac.ops.rar_set(&adapter->hw, adapter->hw.mac.addr, 0);
+	hw->mac.ops.rar_set(&adapter->hw, adapter->hw.mac.addr,
+			    adapter->hw.mac.rar_entry_count - 2);
 
 	if (adapter->flags & FLAG_RESET_OVERWRITES_LAA) {
 		/* activate the work around */

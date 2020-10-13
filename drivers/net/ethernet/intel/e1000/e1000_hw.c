@@ -4278,7 +4278,7 @@ static void e1000_init_rx_addrs(struct e1000_hw *hw)
 	/* Setup the receive address. */
 	e_dbg("Programming MAC Address into RAR[0]\n");
 
-	e1000_rar_set(hw, hw->mac_addr, 0);
+	e1000_rar_set(hw, hw->perm_mac_addr, 0);
 
 	rar_num = E1000_RAR_ENTRIES;
 
