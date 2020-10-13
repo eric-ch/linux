@@ -2022,11 +2022,24 @@ static void netback_changed(struct xenbus_device *dev,
 	case XenbusStateInitialised:
 	case XenbusStateReconfiguring:
 	case XenbusStateReconfigured:
+		break;
+
 	case XenbusStateUnknown:
+		/* if the backend vanishes from xenstore, close frontend */
+		if (!xenbus_exists(XBT_NIL, dev->otherend, "") &&
+		    (dev->state != XenbusStateUnknown)) {
+			dev_warn(&dev->dev,
+				"backend vanished, closing frontend\n");
+			if (dev->state != XenbusStateClosed)
+				xenbus_frontend_closed(dev);
+			netif_carrier_off(np->netdev);
+		}
 		break;
 
 	case XenbusStateInitWait:
-		if (dev->state != XenbusStateInitialising)
+		/* allow reconnect if our state is either initialising, or closed */
+		if (dev->state != XenbusStateInitialising &&
+		    dev->state != XenbusStateClosed)
 			break;
 		if (xennet_connect(netdev) != 0)
 			break;
