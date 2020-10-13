@@ -839,6 +839,48 @@ out:
 	return rc;
 }
 
+static long privcmd_ioctl_mmap_cache_attr(void __user *udata)
+{
+	struct privcmd_mmapcacheattr m;
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma;
+	unsigned long prot;
+
+	if (copy_from_user(&m, udata, sizeof(m)))
+		return -EFAULT;
+
+	vma = find_vma(mm, m.addr);
+	if (vma == NULL)
+		return -EINVAL;
+
+	switch (m.type) {
+		case XEN_DOMCTL_MEM_CACHEATTR_UC:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_UC);
+			break;
+		case XEN_DOMCTL_MEM_CACHEATTR_WC:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_WC);
+			break;
+		case XEN_DOMCTL_MEM_CACHEATTR_WT:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_WT);
+			break;
+		case XEN_DOMCTL_MEM_CACHEATTR_WP:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_WP);
+			break;
+		case XEN_DOMCTL_MEM_CACHEATTR_WB:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_WB);
+			break;
+		case XEN_DOMCTL_MEM_CACHEATTR_UCM:
+			prot = cachemode2protval(_PAGE_CACHE_MODE_UC_MINUS);
+			break;
+		default:
+			return -EINVAL;
+	}
+
+	pgprot_val(vma->vm_page_prot) |= prot;
+
+	return 0;
+}
+
 static long privcmd_ioctl(struct file *file,
 			  unsigned int cmd, unsigned long data)
 {
@@ -872,6 +914,10 @@ static long privcmd_ioctl(struct file *file,
 
 	case IOCTL_PRIVCMD_MMAP_RESOURCE:
 		ret = privcmd_ioctl_mmap_resource(file, udata);
+		break;
+
+	case IOCTL_PRIVCMD_MMAPCACHEATTR:
+		ret = privcmd_ioctl_mmap_cache_attr(udata);
 		break;
 
 	default:

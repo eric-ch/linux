@@ -98,6 +98,19 @@ struct privcmd_mmap_resource {
 	__u64 addr;
 };
 
+#define XEN_DOMCTL_MEM_CACHEATTR_UC  0
+#define XEN_DOMCTL_MEM_CACHEATTR_WC  1
+#define XEN_DOMCTL_MEM_CACHEATTR_WT  4
+#define XEN_DOMCTL_MEM_CACHEATTR_WP  5
+#define XEN_DOMCTL_MEM_CACHEATTR_WB  6
+#define XEN_DOMCTL_MEM_CACHEATTR_UCM 7
+
+struct privcmd_mmapcacheattr {
+       __u64 addr;
+       int type;
+};
+
+
 /*
  * @cmd: IOCTL_PRIVCMD_HYPERCALL
  * @arg: &privcmd_hypercall_t
@@ -125,5 +138,7 @@ struct privcmd_mmap_resource {
 	_IOC(_IOC_NONE, 'P', 6, sizeof(domid_t))
 #define IOCTL_PRIVCMD_MMAP_RESOURCE				\
 	_IOC(_IOC_NONE, 'P', 7, sizeof(struct privcmd_mmap_resource))
+#define IOCTL_PRIVCMD_MMAPCACHEATTR                            \
+	_IOC(_IOC_NONE, 'P', 200, sizeof(struct privcmd_mmapcacheattr))
 
 #endif /* __LINUX_PUBLIC_PRIVCMD_H__ */
