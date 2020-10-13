@@ -76,6 +76,9 @@ module_param(device_id_scheme, bool, 0444);
 static int only_lcd = -1;
 module_param(only_lcd, int, 0444);
 
+static bool delay_init = 0;
+module_param(delay_init, bool, 0644);
+
 static int register_count;
 static DEFINE_MUTEX(register_count_mutex);
 static DEFINE_MUTEX(video_list_lock);
@@ -2258,6 +2261,22 @@ bool acpi_video_handles_brightness_key_presses(void)
 }
 EXPORT_SYMBOL(acpi_video_handles_brightness_key_presses);
 
+static ssize_t store_init_acpi_video(struct bus_type *bus,
+                                    const char *buf, size_t count)
+{
+	unsigned int val;
+	if (kstrtouint(buf, 10, &val) || val != 1)
+		return -EINVAL;
+	acpi_video_register();
+	return count;
+}
+
+static struct bus_attribute init_acpi_video_attr = {
+	.attr = {.name = "init_acpi_video", .mode = 0644},
+	.show = NULL,
+	.store = store_init_acpi_video,
+};
+
 /*
  * This is kind of nasty. Hardware using Intel chipsets may require
  * the video opregion code to be run first in order to initialise
@@ -2278,6 +2297,9 @@ static int __init acpi_video_init(void)
 	if (acpi_disabled)
 		return 0;
 
+	if (delay_init)
+		return bus_create_file(&acpi_bus_type, &init_acpi_video_attr);
+
 	if (intel_opregion_present())
 		return 0;
 
@@ -2286,6 +2308,9 @@ static int __init acpi_video_init(void)
 
 static void __exit acpi_video_exit(void)
 {
+	if (delay_init)
+		bus_remove_file(&acpi_bus_type, &init_acpi_video_attr);
+
 	acpi_video_detect_exit();
 	acpi_video_unregister();
 
