@@ -532,9 +532,7 @@ struct xenvif *xenvif_alloc(struct device *parent, domid_t domid,
 	INIT_LIST_HEAD(&vif->fe_mcast_addr);
 
 	dev->netdev_ops	= &xenvif_netdev_ops;
-	dev->hw_features = NETIF_F_SG |
-		NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM |
-		NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_FRAGLIST;
+	dev->hw_features = NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6;
 	dev->features = dev->hw_features | NETIF_F_RXCSUM;
 	dev->ethtool_ops = &xenvif_ethtool_ops;
 

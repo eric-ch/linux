@@ -1313,11 +1313,8 @@ static struct net_device *xennet_create_dev(struct xenbus_device *dev)
 
 	netdev->netdev_ops	= &xennet_netdev_ops;
 
-	netdev->features        = NETIF_F_IP_CSUM | NETIF_F_RXCSUM |
-				  NETIF_F_GSO_ROBUST;
-	netdev->hw_features	= NETIF_F_SG |
-				  NETIF_F_IPV6_CSUM |
-				  NETIF_F_TSO | NETIF_F_TSO6;
+	netdev->features        = NETIF_F_RXCSUM | NETIF_F_GSO_ROBUST;
+	netdev->hw_features	= NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6;
 
 	/*
          * Assume that all hw features are available for now. This set
