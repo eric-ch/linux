@@ -86,7 +86,7 @@ static struct list_head pending_to_free;
 static void async_free_reqs(unsigned long);
 static DECLARE_TASKLET(async_free_reqs_task, async_free_reqs, 0);
 
-static int do_usb_io_op(usbif_t *usbif);
+static int do_usb_io_op(usbif_t *usbif, unsigned int *eoi_flags);
 static void dispatch_usb_io(usbif_t *usbif,
 				 usbif_request_t *req,
 				 pending_req_t *pending_req);
@@ -444,12 +444,15 @@ static void print_stats(usbif_t *usbif)
 int usbif_schedule(void *arg)
 {
 	usbif_t *usbif = arg;
+	bool do_eoi;
+	unsigned int eoi_flags = XEN_EOI_FLAG_SPURIOUS;
 
 	usbif_get(usbif);
 
 	debug_print(LOG_LVL_INFO, "%s: started\n", current->comm);
 
 	while (!kthread_should_stop()) {
+		do_eoi = usbif->waiting_reqs;
 		if (try_to_freeze())
 			continue;
 
@@ -464,8 +467,13 @@ int usbif_schedule(void *arg)
 			usbif->waiting_reqs = 0;
 			smp_mb(); /* clear flag *before* checking for work */
 
-			if (do_usb_io_op(usbif))
+			if (do_usb_io_op(usbif, &eoi_flags))
 				usbif->waiting_reqs = 1;
+
+			if (do_eoi && !usbif->waiting_reqs) {
+				xen_irq_lateeoi(usbif->irq, eoi_flags);
+				eoi_flags |= XEN_EOI_FLAG_SPURIOUS;
+			}
 
 			if (log_stats && time_after(jiffies, usbif->st_print))
 				print_stats(usbif);
@@ -690,7 +698,7 @@ irqreturn_t usbif_be_int(int irq, void *dev_id)
  * DOWNWARD CALLS -- These interface with the usb-device layer proper.
  */
 
-static int do_usb_io_op(usbif_t *usbif)
+static int do_usb_io_op(usbif_t *usbif, unsigned int *eoi_flags)
 {
 	usbif_back_rings_t *usb_rings = &usbif->usb_rings;
 	usbif_request_t req;
@@ -706,6 +714,9 @@ static int do_usb_io_op(usbif_t *usbif)
 
 		if (RING_REQUEST_CONS_OVERFLOW(&usb_rings->common, rc))
 			break;
+
+		/* We have a request, clean the spurious flag. */
+		*eoi_flags &= ~XEN_EOI_FLAG_SPURIOUS;
 
 		pending_req = alloc_req();
 		if (NULL == pending_req) {

@@ -108,7 +108,7 @@ int usbif_map(usbif_t *usbif, grant_ref_t shpage_ref, unsigned int evtchn)
 		BUG();
 	}
 
-	err = bind_interdomain_evtchn_to_irqhandler(
+	err = bind_interdomain_evtchn_to_irqhandler_lateeoi(
 		usbif->domid, evtchn, usbif_be_int, 0, "usbif-backend", usbif);
 	if (err < 0)
 	{
