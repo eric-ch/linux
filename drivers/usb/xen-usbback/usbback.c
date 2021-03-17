@@ -326,6 +326,7 @@ static void fast_flush_area_indirect(pending_req_t *req)
         unsigned int i, invcount = 0;
         grant_handle_t *handle;
 	pending_segment_t *indirect_seg;
+	struct page **pages;
         int ret;
 
 	debug_print(LOG_LVL_DEBUG, "%s Flushing %d indirect segs!\n",
@@ -340,6 +341,15 @@ static void fast_flush_area_indirect(pending_req_t *req)
 		return;
 	}
 
+	pages = kmalloc_array(req->pending_indirect_segments,
+			sizeof(pages[0]), GFP_KERNEL);
+	if (!pages) {
+		debug_print(LOG_LVL_ERROR, "%s: req %p malloc %d pages failed\n",
+				__FUNCTION__, req, req->pending_indirect_segments);
+		ret = -1;
+		goto free_unmap;
+	}
+
 	for (i = 0; i < req->pending_indirect_segments; i++) {
 		indirect_seg = req->pending_indirect_segment[i];
 		BUG_ON(!indirect_seg);
@@ -351,11 +361,13 @@ static void fast_flush_area_indirect(pending_req_t *req)
 					GNTMAP_host_map, *handle);
 		*handle = USBBACK_INVALID_HANDLE;
 		invcount++;
+		pages[i] = indirect_seg->page;
 	}
-        ret = HYPERVISOR_grant_table_op(GNTTABOP_unmap_grant_ref,
-					unmap, invcount);
+	ret = gnttab_unmap_refs(unmap, NULL, pages, invcount);
 	BUG_ON(ret);
 
+	kfree(pages);
+free_unmap:
 	kfree(unmap);
 }
 #endif
@@ -365,12 +377,19 @@ static void fast_flush_area(pending_req_t *req)
 	struct gnttab_unmap_grant_ref unmap[USBIF_MAX_SEGMENTS_PER_REQUEST];
 	unsigned int i, invcount = 0;
 	grant_handle_t *handle;
+	struct page **pages;
 	int ret;
 
 #ifdef INDIRECT_SEGMENTS
 	if (is_indirect(req))
 		fast_flush_area_indirect(req);
 #endif
+	pages = kmalloc_array(req->nr_pages, sizeof(pages[0]), GFP_KERNEL);
+	if (!pages) {
+		debug_print(LOG_LVL_ERROR, "%s: req %p malloc %d pages failed\n",
+				__FUNCTION__, req, req->nr_pages);
+		return;
+	}
 
 	debug_print(LOG_LVL_DEBUG, "%s Flushing %d segs!\n",
                                 __FUNCTION__, req->nr_pages);
@@ -383,10 +402,10 @@ static void fast_flush_area(pending_req_t *req)
 				    *handle);
 		*handle = USBBACK_INVALID_HANDLE;
 		invcount++;
+		pages[i] = req->pending_segment[i]->page;
 	}
 
-	ret = HYPERVISOR_grant_table_op(
-		GNTTABOP_unmap_grant_ref, unmap, invcount);
+	ret = gnttab_unmap_refs(unmap, NULL, pages, invcount);
 	BUG_ON(ret);
 }
 
@@ -851,6 +870,7 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 			int indirect)
 {
 	struct gnttab_map_grant_ref *map;
+	struct page **pages;
 	int i, ret;
 
 	BUG_ON(nseg > USBIF_MAX_SEGMENTS_PER_IREQUEST);
@@ -860,6 +880,14 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 		debug_print(LOG_LVL_ERROR, "%s: req %p offset %d nseg %d indirect %d\n",
 			__FUNCTION__, pending_req, offset, nseg, indirect);
 		return (-1);
+	}
+
+	pages = kmalloc_array(nseg, sizeof(pages[0]), GFP_KERNEL);
+	if (!pages) {
+		debug_print(LOG_LVL_ERROR, "%s: req %p offset %d nseg %d indirect %d\n",
+				__FUNCTION__, pending_req, offset, nseg, indirect);
+		ret = -1;
+		goto free_map;
 	}
 
 	for (i = 0; i < nseg; i++) {
@@ -877,23 +905,22 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 		else
 			flags = GNTMAP_host_map;
 		gnttab_set_map_op(&map[i], virtual_address, flags, gref[i], domid);
+
+		pages[i] = is_indirect(pending_req) ?
+			pending_req->pending_indirect_segment[page_nr]->page :
+			pending_req->pending_segment[page_nr]->page;
+
 #ifdef DEBUG_CHECKS
 		debug_print(LOG_LVL_DEBUG, "%s: %d of %d gref %x flags %x vaddr %lx\n",
 			__FUNCTION__, i, nseg, gref[i], flags, virtual_address);
 #endif
 	}
 
-	ret = HYPERVISOR_grant_table_op(GNTTABOP_map_grant_ref, map, nseg);
+	ret = gnttab_map_refs(map, NULL, pages, nseg);
 	BUG_ON(ret);
 
 	for (i = 0; i < nseg; i++) {
-#ifdef INDIRECT_SEGMENTS
 		int page_nr = i + offset;
-		unsigned long virtual_address = indirect ? vaddr(pending_req, page_nr)
-				: vaddr_base(pending_req, page_nr);
-#else
-		unsigned long virtual_address = vaddr_base(pending_req, i);
-#endif
 
 		if (unlikely(map[i].status != 0)) {
 			debug_print(LOG_LVL_ERROR,
@@ -911,11 +938,10 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 
 		if (ret)
 			continue;
-
-		set_phys_to_machine(__pa(virtual_address) >> PAGE_SHIFT,
-				FOREIGN_FRAME(map[i].dev_bus_addr >> PAGE_SHIFT));
 	}
 
+	kfree(pages);
+free_map:
 	kfree(map);
 
 	return (ret);
@@ -1213,9 +1239,6 @@ static int __init usbif_init(void)
 {
 	int i, mmap_pages;
 
-	if (!xen_pv_domain())
-		return -ENODEV;
-
 	if (vusb_init())
 		return -EINVAL;
 
@@ -1231,13 +1254,13 @@ static int __init usbif_init(void)
 	if (!pending_reqs || !pending_pages || !pending_segments)
 		goto out_of_memory;
 
+	if (gnttab_alloc_pages(mmap_pages, pending_pages))
+		goto out_of_memory;
+
 	INIT_LIST_HEAD(&pending_segments_free);
 
 	for (i = 0; i < mmap_pages; i++) {
 		pending_segments[i].grant_handle = USBBACK_INVALID_HANDLE;
-		pending_pages[i] = alloc_page(GFP_KERNEL);
-		if (pending_pages[i] == NULL)
-			goto out_of_memory;
 		pending_segments[i].page = pending_pages[i];
 		list_add_tail(&pending_segments[i].free_list, &pending_segments_free);
 	}
@@ -1266,10 +1289,6 @@ static int __init usbif_init(void)
  out_of_memory:
 	kfree(pending_reqs);
 	kfree(pending_segments);
-	for (i = 0; i < mmap_pages; i++) {
-		if (pending_pages[i])
-			__free_page(pending_pages[i]);
-	}
 	vfree(pending_pages);
 	printk("%s: out of memory\n", __FUNCTION__);
 	return -ENOMEM;
