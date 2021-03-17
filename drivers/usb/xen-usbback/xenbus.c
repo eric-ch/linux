@@ -359,12 +359,12 @@ static int usbback_probe(struct xenbus_device *dev,
 	/* setup back pointer */
 	be->usbif->be = be;
 
-	err = xenbus_watch_pathfmt(dev, &be->backend_watch, backend_changed,
+	err = xenbus_watch_pathfmt(dev, &be->backend_watch, NULL, backend_changed,
 				   "%s/%s", dev->nodename, "physical-device");
 	if (err)
 		goto fail;
 
-	err = xenbus_watch_pathfmt(dev, &be->autosuspend_watch,
+	err = xenbus_watch_pathfmt(dev, &be->autosuspend_watch, NULL,
 				   autosuspend_changed, "%s/%s", dev->otherend,
 				   "autosuspend");
 	if (err)
