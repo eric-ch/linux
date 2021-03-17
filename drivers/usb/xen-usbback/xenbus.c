@@ -437,6 +437,7 @@ static void frontend_changed(struct xenbus_device *dev,
 		if (xenbus_dev_is_online(dev))
 			break;
 		/* fall through if not online */
+		fallthrough;
 	case XenbusStateUnknown:
 		device_unregister(&dev->dev);
 		break;
