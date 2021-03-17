@@ -206,6 +206,7 @@ static void free_indirect_segments(pending_req_t *req)
                 pending_segment_t *segment = req->pending_indirect_segment[index];
 
 		BUG_ON(!segment);
+		req->pending_indirect_segment[index] = NULL;
                 list_add(&segment->free_list, &pending_segments_free);
                 pending_segments_free_cnt++;
 
@@ -917,7 +918,6 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 	}
 
 	ret = gnttab_map_refs(map, NULL, pages, nseg);
-	BUG_ON(ret);
 
 	for (i = 0; i < nseg; i++) {
 		int page_nr = i + offset;
@@ -926,7 +926,7 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 			debug_print(LOG_LVL_ERROR,
 				"invalid buffer -- could not remap it\n");
 			map[i].handle = USBBACK_INVALID_HANDLE;
-			ret |= 1;
+			ret |= !ret;
 		}
 
 #ifdef INDIRECT_SEGMENTS
@@ -935,9 +935,6 @@ static int map_request(pending_req_t *pending_req, int offset, domid_t domid,
 		else
 #endif
 			pending_req->pending_segment[i]->grant_handle = map[i].handle;
-
-		if (ret)
-			continue;
 	}
 
 	kfree(pages);
